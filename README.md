@@ -1,6 +1,6 @@
 # dezip
 
-独立的 Go 解压与解压缩包，使用 [`mholt/archives`](https://github.com/mholt/archives) 识别并读取归档格式。
+独立的 Go 解压与解压缩包，使用 [`mholt/archives`](https://github.com/mholt/archives) 识别并读取归档格式。`Unpack` 用于明确要求解压；`Process` 兼容 DASM 风格的 `extract_as` 配置，可选择保留下载文件或解压。
 
 ```go
 result, err := dezip.Unpack(ctx, "release.tar.gz", "./unpacked", dezip.Options{})
@@ -10,12 +10,49 @@ if err != nil {
 fmt.Printf("%s: %d files, %d bytes\n", result.Format, result.Files, result.ExpandedBytes)
 ```
 
+## 下载文件处理模式
+
+`Process` 接收已下载的文件，不负责网络下载。它支持 `auto`、`zip`、`tar`、`gzip`、`skip`。空值表示保留原文件；`tar.gz`、`tar.xz` 等 TAR 压缩值映射到 TAR 模式。`gzip` 解出一个文件，归档模式解出完整目录。`exe` 不属于支持值，会返回无效模式错误。
+
+```go
+mode, err := dezip.ParseExtractAs(extractAs) // 空值、skip -> 不解压
+if err != nil {
+	return err
+}
+result, err := dezip.Process(ctx, downloadedPath, outputDir, mode, dezip.Options{})
+if err != nil {
+	return err
+}
+if result.Skipped {
+	useDownloadedFile(result.SourcePath)
+} else {
+	useExtractedDirectory(result.OutputDir)
+	if result.OutputFile != "" {
+		usePrimaryFile(result.OutputFile)
+	}
+}
+```
+
+Set `Options.ExpectedFile` to require a relative regular file before the staged output directory is published. For raw compressed streams, it must match the single output file name.
+
+- `skip` 保留下载文件原样，不需要输出目录。
+- `auto` 解压可识别的归档或压缩流；普通非归档文件保留原样。
+- `zip` 和 `tar` 会校验归档格式再解压；压缩 TAR（如 `.tar.gz`、`.tgz`）属于 `tar`。
+- 归档解到一个新目录，保留目录层级，可包含一个或多个文件；单流压缩格式会在该目录内生成一个文件。
+- 解压失败时目标目录不会发布，下载文件保留供重试。
+
 ## 命令行调用
 
-命令会自动识别格式并调用 `dezip.Unpack`。输出目录必须不存在：
+命令会自动识别格式并调用 `dezip.Process`。输出目录必须不存在；`skip` 不需要输出目录：
 
 ```powershell
 go run ./cmd/dezip -src .\release.tar.gz -dest .\release
+```
+
+保留单个下载文件：
+
+```powershell
+go run ./cmd/dezip -src .\plugin.exe -as skip
 ```
 
 也支持位置参数：`go run ./cmd/dezip .\release.zip .\release`。

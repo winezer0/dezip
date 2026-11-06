@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"os"
 	"path"
 	"path/filepath"
 	"runtime"
@@ -164,4 +165,26 @@ func joinWithin(root, relative string) (string, error) {
 		return "", fmt.Errorf("%w: path %q escapes destination", ErrUnsafeEntry, relative)
 	}
 	return target, nil
+}
+
+func resolveExpectedOutputFile(root, relative string) (string, error) {
+	if relative == "" || !filepath.IsLocal(relative) || filepath.Clean(relative) == "." {
+		return "", fmt.Errorf("%w: expected file must be a relative file path", ErrUnsafeEntry)
+	}
+	target, err := joinWithin(root, filepath.ToSlash(relative))
+	if err != nil {
+		return "", err
+	}
+	info, err := os.Lstat(target)
+	if err != nil {
+		return "", fmt.Errorf("expected output file %q: %w", relative, err)
+	}
+	if !info.Mode().IsRegular() {
+		return "", fmt.Errorf("expected output %q is not a regular file", relative)
+	}
+	rel, err := filepath.Rel(root, target)
+	if err != nil {
+		return "", err
+	}
+	return rel, nil
 }

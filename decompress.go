@@ -44,6 +44,7 @@ func (state *unpackState) decompress(ctx context.Context, extension string, deco
 	if closeErr != nil {
 		return closeErr
 	}
+	state.result.OutputFile = name
 	state.result.Entries = 1
 	state.result.Files = 1
 	state.notify(name)
