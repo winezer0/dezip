@@ -98,6 +98,9 @@ func TestProcessZipExtractsNestedFilesAndResolvesExpectedFile(t *testing.T) {
 }
 
 func TestProcessTarGzipExtractsMultipleFiles(t *testing.T) {
+	if !fullFormatsEnabled {
+		t.Skip("TAR support requires the dezip_full build tag")
+	}
 	root := t.TempDir()
 	source := filepath.Join(root, "plugin.tar.gz")
 	destination := filepath.Join(root, "plugin")
@@ -118,6 +121,9 @@ func TestProcessTarGzipExtractsMultipleFiles(t *testing.T) {
 }
 
 func TestProcessGzipWritesSingleFile(t *testing.T) {
+	if !fullFormatsEnabled {
+		t.Skip("GZIP support requires the dezip_full build tag")
+	}
 	root := t.TempDir()
 	source := filepath.Join(root, "plugin.bin.gz")
 	destination := filepath.Join(root, "plugin")

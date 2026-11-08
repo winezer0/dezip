@@ -7,11 +7,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-
-	"github.com/mholt/archives"
 )
 
-func (state *unpackState) decompress(ctx context.Context, extension string, decompressor archives.Decompressor, source io.Reader, sourcePath string) error {
+func (state *unpackState) decompress(ctx context.Context, extension string, openReader func() (io.ReadCloser, error), sourcePath string) error {
 	name := state.options.OutputName
 	if name == "" {
 		base := filepath.Base(sourcePath)
@@ -27,7 +25,7 @@ func (state *unpackState) decompress(ctx context.Context, extension string, deco
 	if err != nil {
 		return err
 	}
-	reader, err := decompressor.OpenReader(source)
+	reader, err := openReader()
 	if err != nil {
 		return err
 	}

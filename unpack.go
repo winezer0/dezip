@@ -7,8 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-
-	"github.com/mholt/archives"
 )
 
 // Unpack identifies and unpacks an archive or compressed stream into destination.
@@ -92,26 +90,18 @@ func unpack(ctx context.Context, sourcePath, destination string, options Options
 		return Result{}, errors.New("source must be a regular file")
 	}
 
-	format, stream, err := identifyFormat(ctx, sourcePath, source)
+	format, err := identifyFormat(ctx, sourcePath, source)
 	if err != nil {
-		if mode == ModeAuto && skipOrdinaryFiles && opts.ExpectedFile == "" && !hasKnownArchiveExtension(sourcePath) && errors.Is(err, archives.NoMatch) && ctx.Err() == nil {
+		if mode == ModeAuto && skipOrdinaryFiles && opts.ExpectedFile == "" && !hasKnownArchiveExtension(sourcePath) && errors.Is(err, ErrNoMatch) && ctx.Err() == nil {
 			return Result{Mode: mode, SourcePath: sourcePath, Skipped: true}, nil
 		}
 		return Result{}, fmt.Errorf("identify source format: %w", err)
 	}
-	if format == nil {
-		if mode == ModeAuto && skipOrdinaryFiles && opts.ExpectedFile == "" && !hasKnownArchiveExtension(sourcePath) && ctx.Err() == nil {
-			return Result{Mode: mode, SourcePath: sourcePath, Skipped: true}, nil
-		}
-		return Result{}, ErrUnsupportedFormat
-	}
 	if mode != ModeAuto && !formatMatchesMode(format, mode) {
 		return Result{}, fmt.Errorf("%w: requested %s, detected %s", ErrModeMismatch, mode, format.Extension())
 	}
-	if _, ok := format.(archives.Extractor); !ok {
-		if _, ok := format.(archives.Decompressor); !ok {
-			return Result{}, fmt.Errorf("%w: %s", ErrUnsupportedFormat, format.Extension())
-		}
+	if format.extract == nil && format.openReader == nil {
+		return Result{}, fmt.Errorf("%w: %s", ErrUnsupportedFormat, format.Extension())
 	}
 
 	dest, stage, err := prepareDestination(destination)
@@ -123,7 +113,7 @@ func unpack(ctx context.Context, sourcePath, destination string, options Options
 	result := Result{
 		Mode:       mode,
 		SourcePath: sourcePath,
-		Format:     strings.TrimPrefix(format.Extension(), "."),
+		Format:     strings.TrimPrefix(format.extension, "."),
 		OutputDir:  dest,
 	}
 	state := &unpackState{
@@ -134,16 +124,16 @@ func unpack(ctx context.Context, sourcePath, destination string, options Options
 	}
 
 	rawStream := false
-	if extractor, ok := format.(archives.Extractor); ok {
-		if err := extractor.Extract(ctx, stream, state.extractEntry); err != nil {
+	if format.extract != nil {
+		if err := format.extract(ctx, state.extractEntry); err != nil {
 			return result, fmt.Errorf("extract %s: %w", result.Format, err)
 		}
 		if err := state.finishLinks(ctx); err != nil {
 			return result, err
 		}
-	} else if decompressor, ok := format.(archives.Decompressor); ok {
+	} else if format.openReader != nil {
 		rawStream = true
-		if err := state.decompress(ctx, format.Extension(), decompressor, stream, sourcePath); err != nil {
+		if err := state.decompress(ctx, format.Extension(), format.openReader, sourcePath); err != nil {
 			return result, fmt.Errorf("decompress %s: %w", result.Format, err)
 		}
 	} else {
@@ -209,18 +199,15 @@ func hasKnownArchiveExtension(sourcePath string) bool {
 	return false
 }
 
-func formatMatchesMode(format archives.Format, mode Mode) bool {
+func formatMatchesMode(format *identifiedFormat, mode Mode) bool {
 	extension := strings.ToLower(strings.TrimPrefix(format.Extension(), "."))
 	switch mode {
 	case ModeZip:
-		_, ok := format.(archives.Extractor)
-		return ok && extension == "zip"
+		return format.extract != nil && extension == "zip"
 	case ModeTar:
-		_, ok := format.(archives.Extractor)
-		return ok && (extension == "tar" || extension == "tgz" || strings.HasPrefix(extension, "tar."))
+		return format.extract != nil && (extension == "tar" || extension == "tgz" || strings.HasPrefix(extension, "tar."))
 	case ModeGzip:
-		_, ok := format.(archives.Decompressor)
-		return ok && (extension == "gz" || extension == "gzip")
+		return format.openReader != nil && (extension == "gz" || extension == "gzip")
 	default:
 		return true
 	}

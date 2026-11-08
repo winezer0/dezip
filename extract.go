@@ -6,8 +6,6 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-
-	"github.com/mholt/archives"
 )
 
 type pendingLink struct {
@@ -26,7 +24,7 @@ type unpackState struct {
 	symlinks  []pendingLink
 }
 
-func (state *unpackState) extractEntry(ctx context.Context, entry archives.FileInfo) error {
+func (state *unpackState) extractEntry(ctx context.Context, entry archiveEntry) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -116,7 +114,7 @@ func (state *unpackState) extractEntry(ctx context.Context, entry archives.FileI
 	return nil
 }
 
-func (state *unpackState) writeEntry(ctx context.Context, destination string, entry archives.FileInfo, mode fs.FileMode) error {
+func (state *unpackState) writeEntry(ctx context.Context, destination string, entry archiveEntry, mode fs.FileMode) error {
 	reader, err := entry.Open()
 	if err != nil {
 		return fmt.Errorf("open archive member: %w", err)

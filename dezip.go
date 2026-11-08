@@ -1,4 +1,5 @@
-// Package dezip safely unpacks common archive and compression formats.
+// Package dezip safely unpacks ZIP archives by default. Build with the
+// dezip_full tag to enable additional archive and compression formats.
 package dezip
 
 import "errors"
@@ -9,6 +10,8 @@ const (
 )
 
 var (
+	// ErrNoMatch indicates that the input is not recognized as a supported format.
+	ErrNoMatch = errors.New("no supported format matched")
 	// ErrDestinationExists indicates that the requested output directory already exists.
 	ErrDestinationExists = errors.New("destination already exists")
 	// ErrInvalidMode indicates that an extraction mode is not supported.
